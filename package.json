@@ -1,0 +1,19 @@
+{
+  "name": "sdk-miniapp-vv",
+  "version": "1.0.0",
+  "description": "sdk-miniapp test",
+  "main": "index.ts",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/fuxuewei/sdk-miniapp-vv.git"
+  },
+  "author": "vv",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/fuxuewei/sdk-miniapp-vv/issues"
+  },
+  "homepage": "https://github.com/fuxuewei/sdk-miniapp-vv#readme"
+}
