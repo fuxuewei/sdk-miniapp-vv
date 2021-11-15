@@ -19,6 +19,7 @@ interface OptionsType {
   appid: string;
   token: string;
   proxyPage?: boolean;
+  unionid?: string;
 }
 const originPage = Page; // 重写Page方法
 // 获取当前时间戳
@@ -61,6 +62,7 @@ Page = (page) => {
 export class Test {
   appid: string;
   token: string;
+  unionid: string;
   proxyPage: boolean;
   constructor() {
     // App 事件
@@ -123,10 +125,12 @@ export class Test {
    * @param appid // 微信小程序appID，以wx开头
    * @param token // token是唯一必须配置的参数，请联系有数数据服务sr_data_service@tencent.com提供
    * @param proxyPage // 是否开启自动代理 Page，默认是：false
+   * @param unionid // 开放平台的唯一标识
    */
-  init({ appid, token, proxyPage }: OptionsType) {
+  init({ appid, token, unionid, proxyPage }: OptionsType) {
     this.appid = appid;
     this.token = token;
+    this.unionid = unionid;
     this.proxyPage = proxyPage || false;
   }
   track(t: string, data: any) {
