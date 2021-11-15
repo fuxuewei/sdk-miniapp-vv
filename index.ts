@@ -4,59 +4,18 @@
  * @team N1
  */
 
-// 初始化
 // SDK需要先通过init初始化才能正常使用
-
-/** 腾讯有数
- * wx.getStorageSync
- * wx.setNavigationBarTitle
- * wx.onAppShow
- * wx.login => js_code wx.request('jscode2session') => openId
- * wx.onAppHide
- * wx.getSystemInfoSync
- */
 interface OptionsType {
-  appid: string;
-  token: string;
-  proxyPage?: boolean;
-  unionid?: string;
+  appid: string; // 微信小程序appID，以wx开头
+  token: string; // token是唯一必须配置的参数，请联系有数数据服务sr_data_service@tencent.com提供
+  proxyPage?: boolean; // 是否开启自动代理 Page，默认是：true
+  unionid?: string; // 开放平台的唯一标识
 }
-const originPage = Page; // 重写Page方法
+const originPage = Page;
 // 获取当前时间戳
 const getTimeStamp = () => {
   let timestamp = Date.parse(new Date().toString());
   return timestamp / 1000;
-};
-/**
- * Page生命周期事件
- * https://developers.weixin.qq.com/miniprogram/dev/reference/api/Page.html#onLoad-Object-query
- */
-Page = (page) => {
-  // 给onShow方法插入埋点
-  const originMethodShow = page['onShow'];
-  const originMethodHide = page['onHide'];
-  const originMethodShare = page['onShareAppMessage'];
-  let inTime: any;
-  let currentRoute: string;
-  page['onShow'] = function () {
-    const route = this.route;
-    currentRoute = route;
-    inTime = getTimeStamp();
-    console.log('page_route', route);
-    return originMethodShow();
-  };
-  page['onHide'] = function () {
-    if (currentRoute === this.route) {
-      console.log(`${this.route}停留时间: ${getTimeStamp() - inTime}s`);
-    }
-    return originMethodHide();
-  };
-  page['onShareAppMessage'] = function (options) {
-    console.log('onShareAppMessage', options);
-    return originMethodShare();
-  };
-
-  return originPage(page);
 };
 
 export class Test {
@@ -123,18 +82,45 @@ export class Test {
       throw new Error('missing wx');
     }
   }
-  /**
-   *
-   * @param appid // 微信小程序appID，以wx开头
-   * @param token // token是唯一必须配置的参数，请联系有数数据服务sr_data_service@tencent.com提供
-   * @param proxyPage // 是否开启自动代理 Page，默认是：false
-   * @param unionid // 开放平台的唯一标识
-   */
+
   init({ appid, token, unionid, proxyPage }: OptionsType) {
     this.appid = appid;
     this.token = token;
     this.unionid = unionid;
-    this.proxyPage = proxyPage || false;
+    this.proxyPage = proxyPage || true;
+    if (proxyPage) {
+      /**
+       * 重写 Page 生命周期事件
+       * https://developers.weixin.qq.com/miniprogram/dev/reference/api/Page.html#onLoad-Object-query
+       */
+      Page = (page) => {
+        // 给onShow方法插入埋点
+        const originMethodShow = page['onShow'];
+        const originMethodHide = page['onHide'];
+        const originMethodShare = page['onShareAppMessage'];
+        let inTime: any;
+        let currentRoute: string;
+        page['onShow'] = function () {
+          const route = this.route;
+          currentRoute = route;
+          inTime = getTimeStamp();
+          console.log('page_route', route);
+          return originMethodShow();
+        };
+        page['onHide'] = function () {
+          if (currentRoute === this.route) {
+            console.log(`${this.route}停留时间: ${getTimeStamp() - inTime}s`);
+          }
+          return originMethodHide();
+        };
+        page['onShareAppMessage'] = function (options) {
+          console.log('onShareAppMessage', options);
+          return originMethodShare();
+        };
+
+        return originPage(page);
+      };
+    }
   }
   track(t: string, data: any) {
     // setContentTrack(data);
