@@ -24,7 +24,7 @@ interface OptionsType {
 const originPage = Page; // 重写Page方法
 // 获取当前时间戳
 const getTimeStamp = () => {
-  let timestamp = Date.parse(new Date());
+  let timestamp = Date.parse(new Date().toString());
   return timestamp / 1000;
 };
 /**
@@ -65,61 +65,64 @@ export class Test {
   unionid: string;
   proxyPage: boolean;
   constructor() {
-    // App 事件
-    /**
-     * 启动
-     * https://developers.weixin.qq.com/miniprogram/dev/api/base/app/life-cycle/wx.getLaunchOptionsSync.html
-     */
-    const dataInfo = wx.getLaunchOptionsSync();
-    console.log('dataInfo', dataInfo);
+    try {
+      // App 事件
+      /**
+       * 启动
+       * https://developers.weixin.qq.com/miniprogram/dev/api/base/app/life-cycle/wx.getLaunchOptionsSync.html
+       */
+      const dataInfo = wx.getLaunchOptionsSync();
+      console.log('dataInfo', dataInfo);
 
-    /**
-     * 显示
-     * https://developers.weixin.qq.com/miniprogram/dev/api/base/app/app-event/wx.onAppShow.html
-     */
-    wx.onAppShow((options) => {
-      console.log('appShow', options);
-      this.localCache().set('options', options);
-      const appid = this.appid;
-      console.log(
-        'showData',
-        options,
-        options?.referrerInfo && options.referrerInfo.appId
-      );
-      try {
-        wx.login({
-          success: function (res) {
-            // 获取到登录code
-            let js_code = res.code;
-            console.log('js_code', js_code);
-            wx.request({
-              // url: `https://api.weixin.qq.com/sns/jscode2session?appid=${appid}&secret=d9364010e2bba6379799ed8621d4091b&js_code=${js_code}&grant_type=authorization_code`,
-              url:
-                'https://zhls.qq.com/wxlogin/getOpenId?appid=' +
-                appid +
-                '&js_code=' +
-                js_code,
-              data: {},
-              header: { 'content-type': 'json' },
-              success: function (t: any) {
-                let openId = t.data?.openId;
-                console.log('openId', openId);
-              },
-            });
-          },
-        });
-      } catch (error) {}
-    });
+      /**
+       * 显示
+       * https://developers.weixin.qq.com/miniprogram/dev/api/base/app/app-event/wx.onAppShow.html
+       */
+      wx.onAppShow((options) => {
+        console.log('appShow', options);
+        this.localCache().set('options', options);
+        const appid = this.appid;
+        console.log(
+          'showData',
+          options,
+          options?.referrerInfo && options.referrerInfo.appId
+        );
+        try {
+          wx.login({
+            success: function (res) {
+              // 获取到登录code
+              let js_code = res.code;
+              console.log('js_code', js_code);
+              wx.request({
+                // url: `https://api.weixin.qq.com/sns/jscode2session?appid=${appid}&secret=d9364010e2bba6379799ed8621d4091b&js_code=${js_code}&grant_type=authorization_code`,
+                url:
+                  'https://zhls.qq.com/wxlogin/getOpenId?appid=' +
+                  appid +
+                  '&js_code=' +
+                  js_code,
+                data: {},
+                header: { 'content-type': 'json' },
+                success: function (t: any) {
+                  let openId = t.data?.openId;
+                  console.log('openId', openId);
+                },
+              });
+            },
+          });
+        } catch (error) {}
+      });
 
-    /**
-     * 隐藏
-     * https://developers.weixin.qq.com/miniprogram/dev/api/base/app/app-event/wx.onAppHide.html
-     */
-    wx.onAppHide((options) => {
-      console.log('hideData', options);
-    });
+      /**
+       * 隐藏
+       * https://developers.weixin.qq.com/miniprogram/dev/api/base/app/app-event/wx.onAppHide.html
+       */
+      wx.onAppHide((options) => {
+        console.log('hideData', options);
+      });
+    } catch {
+      throw new Error('missing wx');
+    }
   }
-
   /**
    *
    * @param appid // 微信小程序appID，以wx开头
