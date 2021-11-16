@@ -3,6 +3,7 @@
  * @owner fuxuewei
  * @team N1
  */
+import utils from './utils';
 
 // SDK需要先通过init初始化才能正常使用
 interface OptionsType {
@@ -24,63 +25,67 @@ export class Test {
   unionid: string;
   proxyPage: boolean;
   constructor() {
-    try {
-      // App 事件
-      /**
-       * 启动
-       * https://developers.weixin.qq.com/miniprogram/dev/api/base/app/life-cycle/wx.getLaunchOptionsSync.html
-       */
-      const dataInfo = wx.getLaunchOptionsSync();
-      console.log('dataInfo', dataInfo);
+    // App 事件
+    /**
+     * 启动
+     * https://developers.weixin.qq.com/miniprogram/dev/api/base/app/life-cycle/wx.getLaunchOptionsSync.html
+     */
+    const dataInfo = wx.getLaunchOptionsSync();
+    console.log('dataInfo', dataInfo);
 
-      /**
-       * 显示
-       * https://developers.weixin.qq.com/miniprogram/dev/api/base/app/app-event/wx.onAppShow.html
-       */
-      wx.onAppShow((options) => {
-        console.log('appShow', options);
-        this.localCache().set('options', options);
-        const appid = this.appid;
-        console.log(
-          'showData',
-          options,
-          options?.referrerInfo && options.referrerInfo.appId
-        );
-        try {
-          wx.login({
-            success: function (res) {
-              // 获取到登录code
-              let js_code = res.code;
-              console.log('js_code', js_code);
-              wx.request({
-                // url: `https://api.weixin.qq.com/sns/jscode2session?appid=${appid}&secret=d9364010e2bba6379799ed8621d4091b&js_code=${js_code}&grant_type=authorization_code`,
-                url:
-                  'https://zhls.qq.com/wxlogin/getOpenId?appid=' +
-                  appid +
-                  '&js_code=' +
-                  js_code,
-                data: {},
-                header: { 'content-type': 'json' },
-                success: function (t: any) {
-                  let openId = t.data?.openId;
-                  console.log('openId', openId);
-                },
-              });
-            },
-          });
-        } catch (error) {}
+    /**
+     * 显示
+     * https://developers.weixin.qq.com/miniprogram/dev/api/base/app/app-event/wx.onAppShow.html
+     */
+    wx.onAppShow((options) => {
+      const appid = this.appid;
+      // 获取options: appid & scene
+      console.log('---------options---------', options);
+      // this.localCache().set('options', options);
+      setTimeout(() => {
+        // 获取参数
+        console.log('---------params---------', utils.getParams());
+        const queryScene = options?.query?.scene;
+        // query.scene 需要使用 decodeURIComponent 才能获取到生成二维码时传入的 scene
+        const scene = queryScene
+          ? decodeURIComponent(queryScene)
+          : utils.getParam('scene');
+        console.log('---------scene---------', scene);
+        this.localCache().set('mini_app_scence', scene);
       });
+      // 登录 获取js_code
+      try {
+        wx.login({
+          success: function (res) {
+            // 获取到登录code
+            let js_code = res.code;
+            console.log('---------js_code---------', js_code);
+            wx.request({
+              // url: `https://api.weixin.qq.com/sns/jscode2session?appid=${appid}&secret=d9364010e2bba6379799ed8621d4091b&js_code=${js_code}&grant_type=authorization_code`,
+              url:
+                'https://zhls.qq.com/wxlogin/getOpenId?appid=' +
+                appid +
+                '&js_code=' +
+                js_code,
+              data: {},
+              header: { 'content-type': 'json' },
+              success: function (t: any) {
+                let openId = t.data?.openId;
+                console.log('openId', openId);
+              },
+            });
+          },
+        });
+      } catch (error) {}
+    });
 
-      /**
-       * 隐藏
-       * https://developers.weixin.qq.com/miniprogram/dev/api/base/app/app-event/wx.onAppHide.html
-       */
-      wx.onAppHide((options) => {
-        console.log('hideData', options);
-      });
-    } catch {
-      throw new Error('missing wx');
-    }
+    /**
+     * 隐藏
+     * https://developers.weixin.qq.com/miniprogram/dev/api/base/app/app-event/wx.onAppHide.html
+     */
+    wx.onAppHide((options) => {
+      // console.log('hideData', options);
+    });
   }
 
   init({ appid, token, unionid, proxyPage }: OptionsType) {
@@ -104,12 +109,14 @@ export class Test {
           const route = this.route;
           currentRoute = route;
           inTime = getTimeStamp();
-          console.log('page_route', route);
+          // console.log('page_route', route);
           return originMethodShow();
         };
         page['onHide'] = function () {
           if (currentRoute === this.route) {
-            console.log(`${this.route}停留时间: ${getTimeStamp() - inTime}s`);
+            console.log(
+              `---------${this.route}停留时间: ${getTimeStamp() - inTime}s`
+            );
           }
           return originMethodHide();
         };
@@ -125,7 +132,6 @@ export class Test {
   track(t: string, data: any) {
     // setContentTrack(data);
     console.log(`埋点上报 ${t}：`, data);
-
     console.log('catch_options', this.localCache().get('options'));
     // 公共属性
     let props = {
