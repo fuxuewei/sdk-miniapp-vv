@@ -1,6 +1,7 @@
 export default {
   // 获取带参数路由
   getCurrentPageUrlWithArgs() {
+    //@ts-ignore
     const pages = getCurrentPages();
     const currentPage = pages[pages.length - 1];
     const url = currentPage.route;
