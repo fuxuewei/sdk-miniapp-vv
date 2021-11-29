@@ -10,9 +10,10 @@ import TezignTracer from './main';
 // SDK需要先通过init初始化才能正常使用
 interface OptionsType {
   appid: string; // 微信小程序appID，以wx开头
-  token: string; // token是唯一必须配置的参数，请联系有数数据服务sr_data_service@tencent.com提供
+  token: string; // token是唯一必须配置的参数，对应租户id
   proxyPage?: boolean; // 是否开启自动代理 Page，默认是：true
   unionid?: string; // 开放平台的唯一标识
+  open_id?: string; // 微信用户在小程序下的唯一标识符
 }
 const tracer = new TezignTracer();
 //@ts-ignore
@@ -23,22 +24,15 @@ const getTimeStamp = () => {
   return timestamp / 1000;
 };
 
-// 引入tezignTracker
-const initTezignTracker = () => {
-  tracer.init({
-    env: 'development',
-    tenant_id: 'dDM=',
-  });
-};
-
+const STORAGEHEAD = 'content_wxapp_';
 export default class TezignWxTrack {
   appid: string;
-  token: string;
-  unionid?: string;
+  tenant_id: string;
+  unionid: string;
+  open_id: string;
   proxyPage: boolean;
+  showOptions: any;
   constructor() {
-    let _that = this;
-    initTezignTracker();
     // App 事件
     /**
      * 启动
@@ -54,15 +48,11 @@ export default class TezignWxTrack {
      * https://developers.weixin.qq.com/miniprogram/dev/api/base/app/app-event/wx.onAppShow.html
      */
     //@ts-ignore
-
     wx.onAppShow((options) => {
-      const appid = this.appid;
       // 获取options: appid & scene
       console.log('---------options---------', options);
-      this.localCache().set('wx_options', options);
+      this.showOptions = options;
       setTimeout(() => {
-        // 获取参数
-        console.log('---------params---------', utils.getParams());
         const queryScene = options?.query?.scene;
         // query.scene 需要使用 decodeURIComponent 才能获取到生成二维码时传入的 渠道号
         const scene = queryScene
@@ -71,36 +61,7 @@ export default class TezignWxTrack {
         console.log('---------scene---------', scene);
         this.localCache().set('sale_scene_id', scene);
       });
-      // 登录 获取js_code
-      try {
-        //@ts-ignore
-
-        wx.login({
-          success: function (res) {
-            // 获取到登录code
-            let js_code = res.code;
-            console.log('---------js_code---------', js_code);
-            //@ts-ignore
-
-            wx.request({
-              // url: `https://api.weixin.qq.com/sns/jscode2session?appid=${appid}&secret=d9364010e2bba6379799ed8621d4091b&js_code=${js_code}&grant_type=authorization_code`,
-              url:
-                'https://zhls.qq.com/wxlogin/getOpenId?appid=' +
-                appid +
-                '&js_code=' +
-                js_code,
-              data: {},
-              header: { 'content-type': 'json' },
-              success: function (t: any) {
-                let openId = t.data?.openId;
-                _that.localCache().set('open_id', openId);
-              },
-            });
-          },
-        });
-      } catch (error) {}
     });
-
     /**
      * 隐藏
      * https://developers.weixin.qq.com/miniprogram/dev/api/base/app/app-event/wx.onAppHide.html
@@ -114,11 +75,15 @@ export default class TezignWxTrack {
 
   init({ appid, token, unionid, proxyPage }: OptionsType) {
     this.appid = appid;
-    this.token = token;
+    this.tenant_id = token;
     this.unionid = unionid;
     this.proxyPage = proxyPage || true;
     let _that = this;
-    if (proxyPage) {
+    tracer.init({
+      env: 'development',
+      tenant_id: this.tenant_id,
+    });
+    if (this.proxyPage) {
       /**
        * 重写 Page 生命周期事件
        * https://developers.weixin.qq.com/miniprogram/dev/reference/api/Page.html#onLoad-Object-query
@@ -132,8 +97,6 @@ export default class TezignWxTrack {
         const originMethodShare = page['onShareAppMessage'];
         let inTime: any;
         let currentRoute: string;
-
-        const options = this.localCache().get('wx_options');
         if (originMethodShow && originMethodHide && originMethodShare) {
           page['onShow'] = function () {
             const route = this.route;
@@ -158,12 +121,12 @@ export default class TezignWxTrack {
             return originMethodHide();
           };
           page['onShareAppMessage'] = function (share_options) {
-            _that.track('Content_wxApp_Share', {
+            console.log('----------onShareAppMessage------', share_options);
+            _that.localCache().set('share_options', {
               share_from: share_options.from,
               page_route: currentRoute,
-              page_title: '',
             });
-            return originMethodShare(options);
+            return originMethodShare(share_options);
           };
         }
         return originPage(page);
@@ -171,20 +134,33 @@ export default class TezignWxTrack {
     }
   }
   track(t: string, data: any) {
-    console.log(`埋点上报 ${t}：`, data);
-    const options = this.localCache().get('wx_options');
+    console.log(`埋点上报-------- ${t}：`, data);
+    const showOptions = this.showOptions;
     // 公共属性
     let commonProps = {
+      page_route: utils.getCurrentPage(),
       app_id: this.appid,
-      wxapp_scence: options.scene,
-      open_id: this.localCache().get('open_id') || '',
+      wxapp_scence: showOptions.scene.toString(),
       sale_scene_id: this.localCache().get('sale_scene_id'),
-      unionid: this.unionid,
       tenant_key: 'content-wx-sdk',
       sdk_version: '1.0.0',
+      tenant_id: this.tenant_id,
+      open_id: 'obFsv******',
     };
+    if (t === 'Content_wxApp_Share') {
+      commonProps = {
+        ...commonProps,
+        ...this.localCache().get('share_options'),
+      };
+    }
+    if (t === 'Content_wxApp_Login' && data?.unionid && data?.open_id) {
+      this.unionid = data.unionid;
+      this.open_id = data.open_id;
+    }
     tracer.track({
       event_type_code: t,
+      unionid: data?.unionid || this.unionid,
+      open_id: data?.open_id || this.open_id,
       event_properties: {
         ...commonProps,
         ...data,
@@ -198,7 +174,7 @@ export default class TezignWxTrack {
         try {
           //@ts-ignore
 
-          e = wx.getStorageSync(t);
+          e = wx.getStorageSync(STORAGEHEAD + t);
         } catch (t) {
           return console.error('CacheManager.get error', t);
         }
@@ -208,7 +184,7 @@ export default class TezignWxTrack {
         try {
           //@ts-ignore
 
-          wx.setStorageSync(t, e);
+          wx.setStorageSync(STORAGEHEAD + t, e);
         } catch (t) {
           return console.error('CacheManager.set error', t);
         }

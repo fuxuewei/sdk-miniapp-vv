@@ -1,4 +1,10 @@
 export default {
+  //获取路由
+  getCurrentPage() {
+    //@ts-ignore
+    const pages = getCurrentPages();
+    return pages[pages.length - 1].route;
+  },
   // 获取带参数路由
   getCurrentPageUrlWithArgs() {
     //@ts-ignore
