@@ -9,11 +9,10 @@ import TezignTracer from './main';
 
 // SDK需要先通过init初始化才能正常使用
 interface OptionsType {
-  appid: string; // 微信小程序appID，以wx开头
+  app_id: string; // 微信小程序app_id，以wx开头
   token: string; // token是唯一必须配置的参数，对应租户id
   proxyPage?: boolean; // 是否开启自动代理 Page，默认是：true
-  unionid?: string; // 开放平台的唯一标识
-  open_id?: string; // 微信用户在小程序下的唯一标识符
+  env?: 'dev' | 'prod';
 }
 const tracer = new TezignTracer();
 //@ts-ignore
@@ -21,17 +20,17 @@ const originPage = Page;
 // 获取当前时间戳
 const getTimeStamp = () => {
   let timestamp = Date.parse(new Date().toString());
-  return timestamp / 1000;
+  return timestamp;
 };
 
 const STORAGEHEAD = 'content_wxapp_';
+const TRACKCODE = 'tezign_trace_id';
 export default class TezignWxTrack {
-  appid: string;
+  app_id: string;
   tenant_id: string;
-  unionid: string;
+  union_id: string;
   open_id: string;
-  proxyPage: boolean;
-  showOptions: any;
+  showOptions: any; // 分享参数
   constructor() {
     // App 事件
     /**
@@ -49,17 +48,17 @@ export default class TezignWxTrack {
      */
     //@ts-ignore
     wx.onAppShow((options) => {
-      // 获取options: appid & scene
+      // 获取options: app_id & scene
       console.log('---------options---------', options);
       this.showOptions = options;
       setTimeout(() => {
-        const queryScene = options?.query?.scene;
+        const queryScene = options?.query?.[TRACKCODE];
         // query.scene 需要使用 decodeURIComponent 才能获取到生成二维码时传入的 渠道号
-        const scene = queryScene
+        const trace_id = queryScene
           ? decodeURIComponent(queryScene)
-          : utils.getParam('scene');
-        console.log('---------scene---------', scene);
-        this.localCache().set('sale_scene_id', scene);
+          : utils.getParam(TRACKCODE);
+        console.log('---------scene---------', trace_id);
+        this.localCache().set('sale_scene_id', trace_id);
       });
     });
     /**
@@ -73,17 +72,16 @@ export default class TezignWxTrack {
     });
   }
 
-  init({ appid, token, unionid, proxyPage }: OptionsType) {
-    this.appid = appid;
+  init({ app_id, token, proxyPage = true, env }: OptionsType) {
+    this.app_id = app_id;
     this.tenant_id = token;
-    this.unionid = unionid;
-    this.proxyPage = proxyPage || true;
     let _that = this;
     tracer.init({
-      env: 'development',
+      // 'development' | 'production', 默认'development'
+      env: env === 'prod' ? 'production' : 'development',
       tenant_id: this.tenant_id,
     });
-    if (this.proxyPage) {
+    if (proxyPage) {
       /**
        * 重写 Page 生命周期事件
        * https://developers.weixin.qq.com/miniprogram/dev/reference/api/Page.html#onLoad-Object-query
@@ -113,9 +111,10 @@ export default class TezignWxTrack {
               _that.track('Content_wxApp_PageHide', {
                 page_route: currentRoute,
                 page_title: '',
+                stay_time: getTimeStamp() - inTime, // 当前页面停留耗时（毫秒）
               });
               console.log(
-                `---------${this.route}停留时间: ${getTimeStamp() - inTime}s`
+                `---------${this.route}停留时间: ${getTimeStamp() - inTime}ms`
               );
             }
             return originMethodHide();
@@ -139,13 +138,12 @@ export default class TezignWxTrack {
     // 公共属性
     let commonProps = {
       page_route: utils.getCurrentPage(),
-      app_id: this.appid,
+      app_id: this.app_id,
       wxapp_scence: showOptions.scene.toString(),
       sale_scene_id: this.localCache().get('sale_scene_id'),
       tenant_key: 'content-wx-sdk',
       sdk_version: '1.0.0',
       tenant_id: this.tenant_id,
-      open_id: 'obFsv******',
     };
     if (t === 'Content_wxApp_Share') {
       commonProps = {
@@ -153,15 +151,18 @@ export default class TezignWxTrack {
         ...this.localCache().get('share_options'),
       };
     }
-    if (t === 'Content_wxApp_Login' && data?.unionid && data?.open_id) {
-      this.unionid = data.unionid;
-      this.open_id = data.open_id;
+    if (t === 'Content_wxApp_Login') {
+      this.setUser(data);
+      delete data.union_id;
+      delete data.open_id;
     }
+    const localUserInfo = this.localCache().get('user_info');
+
     tracer.track({
       event_type_code: t,
-      unionid: data?.unionid || this.unionid,
-      open_id: data?.open_id || this.open_id,
       event_properties: {
+        unionid: this.union_id || localUserInfo.union_id,
+        open_id: this.open_id || localUserInfo.open_id,
         ...commonProps,
         ...data,
       },
@@ -183,7 +184,6 @@ export default class TezignWxTrack {
       set: function (t: string, e: any) {
         try {
           //@ts-ignore
-
           wx.setStorageSync(STORAGEHEAD + t, e);
         } catch (t) {
           return console.error('CacheManager.set error', t);
@@ -191,5 +191,15 @@ export default class TezignWxTrack {
         return !0;
       },
     };
+  }
+  setUser(userInfo: { [key: string]: string }) {
+    const currentUserInfo = this.localCache().get('user_info');
+    this.localCache().set('user_info', { ...currentUserInfo, ...userInfo });
+    console.log('userInfo', userInfo);
+    Object.keys(userInfo).forEach((key) => {
+      if (this.hasOwnProperty(key)) {
+        this[key] = userInfo[key];
+      }
+    });
   }
 }
