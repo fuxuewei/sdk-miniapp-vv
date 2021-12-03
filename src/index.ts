@@ -4,7 +4,6 @@
  * @team N1
  */
 import utils from './utils';
-//@ts-ignore
 import TezignTracer from './main';
 
 // SDK需要先通过init初始化才能正常使用
@@ -25,7 +24,8 @@ const getTimeStamp = () => {
 
 const STORAGEHEAD = 'content_wxapp_';
 const TRACKCODE = 'tezign_trace_id';
-export default class TezignWxTrack {
+export class TezignWxTrack {
+  [key: string]: any;
   app_id: string;
   tenant_id: string;
   union_id: string;
@@ -38,10 +38,7 @@ export default class TezignWxTrack {
      * https://developers.weixin.qq.com/miniprogram/dev/api/base/app/life-cycle/wx.getLaunchOptionsSync.html
      */
     //@ts-ignore
-
-    const dataInfo = wx.getLaunchOptionsSync();
-    console.log('dataInfo', dataInfo);
-
+    // const dataInfo = wx.getLaunchOptionsSync();
     /**
      * 显示
      * https://developers.weixin.qq.com/miniprogram/dev/api/base/app/app-event/wx.onAppShow.html
@@ -49,7 +46,6 @@ export default class TezignWxTrack {
     //@ts-ignore
     wx.onAppShow((options) => {
       // 获取options: app_id & scene
-      console.log('---------options---------', options);
       this.showOptions = options;
       setTimeout(() => {
         const queryScene = options?.query?.[TRACKCODE];
@@ -57,19 +53,17 @@ export default class TezignWxTrack {
         const trace_id = queryScene
           ? decodeURIComponent(queryScene)
           : utils.getParam(TRACKCODE);
-        console.log('---------scene---------', trace_id);
-        this.localCache().set('sale_scene_id', trace_id);
+        this.localCache().set(TRACKCODE, trace_id);
+        this.track('Content_wxApp_AppShow');
       });
     });
     /**
      * 隐藏
      * https://developers.weixin.qq.com/miniprogram/dev/api/base/app/app-event/wx.onAppHide.html
      */
-    //@ts-ignore
-
-    wx.onAppHide((options) => {
-      console.log('hideData', options);
-    });
+    //  wx.onAppHide((options) => {
+    //    console.log('hideData', options);
+    // });
   }
 
   init({ app_id, token, proxyPage = true, env }: OptionsType) {
@@ -102,7 +96,6 @@ export default class TezignWxTrack {
             inTime = getTimeStamp();
             _that.track('Content_wxApp_PageShow', {
               page_route: route,
-              page_title: '',
             });
             return originMethodShow();
           };
@@ -110,17 +103,12 @@ export default class TezignWxTrack {
             if (currentRoute === this.route) {
               _that.track('Content_wxApp_PageHide', {
                 page_route: currentRoute,
-                page_title: '',
                 stay_time: getTimeStamp() - inTime, // 当前页面停留耗时（毫秒）
               });
-              console.log(
-                `---------${this.route}停留时间: ${getTimeStamp() - inTime}ms`
-              );
             }
             return originMethodHide();
           };
           page['onShareAppMessage'] = function (share_options) {
-            console.log('----------onShareAppMessage------', share_options);
             _that.localCache().set('share_options', {
               share_from: share_options.from,
               page_route: currentRoute,
@@ -132,18 +120,18 @@ export default class TezignWxTrack {
       };
     }
   }
-  track(t: string, data: any) {
-    console.log(`埋点上报-------- ${t}：`, data);
+  track(t: string, data?: any) {
     const showOptions = this.showOptions;
     // 公共属性
     let commonProps = {
       page_route: utils.getCurrentPage(),
       app_id: this.app_id,
       wxapp_scence: showOptions.scene.toString(),
-      sale_scene_id: this.localCache().get('sale_scene_id'),
+      tezign_trace_id: this.localCache().get(TRACKCODE),
       tenant_key: 'content-wx-sdk',
-      sdk_version: '1.0.0',
+      sdk_version: process.env.SDK_VERSION,
       tenant_id: this.tenant_id,
+      page_title: '',
     };
     if (t === 'Content_wxApp_Share') {
       commonProps = {
@@ -195,7 +183,6 @@ export default class TezignWxTrack {
   setUser(userInfo: { [key: string]: string }) {
     const currentUserInfo = this.localCache().get('user_info');
     this.localCache().set('user_info', { ...currentUserInfo, ...userInfo });
-    console.log('userInfo', userInfo);
     Object.keys(userInfo).forEach((key) => {
       if (this.hasOwnProperty(key)) {
         this[key] = userInfo[key];

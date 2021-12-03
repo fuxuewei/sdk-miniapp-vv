@@ -25,7 +25,7 @@ export default {
     const url = this.getCurrentPageUrlWithArgs();
     let pattern = /(\w+)=(\w+)/gi;
     let parames = {}; // 定义Object
-    url.replace(pattern, function (a, b, c) {
+    url.replace(pattern, function (a: string, b: string, c: string) {
       parames[b] = c;
     });
     return parames; // 返回这个Object.
