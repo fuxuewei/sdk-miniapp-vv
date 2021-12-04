@@ -2,7 +2,7 @@ import typescript from 'rollup-plugin-typescript2'; // 处理typescript
 import babel from 'rollup-plugin-babel'; // 处理es6
 import { nodeResolve } from '@rollup/plugin-node-resolve'; // 你的包用到第三方npm包
 import commonjs from '@rollup/plugin-commonjs'; // 你的包用到的第三方只有commonjs形式的包
-// import { uglify } from 'rollup-plugin-uglify';
+import { uglify } from 'rollup-plugin-uglify';
 import injectProcessEnv from 'rollup-plugin-inject-process-env';
 import path from 'path';
 
@@ -20,16 +20,19 @@ export default {
       sourcemap: true,
     },
     {
-      file: 'lib/index.umd.js',
+      format: 'umd',
+      file: 'lib/index.umd.js', // umd 兼容形式的包， 可以直接应用于网页 script
       name: 'Tracer',
-      format: 'umd', // umd 兼容形式的包， 可以直接应用于网页 script
       sourcemap: true,
+      plugins: [uglify()],
     },
+
     {
       format: 'umd',
-      file: 'lib/index.js',
+      file: 'lib/index.min.js', // umd 兼容形式的包， 可以直接应用于网页 script
       name: 'Tracer',
       sourcemap: true,
+      plugins: [uglify()],
     },
   ],
   plugins: [
@@ -41,7 +44,6 @@ export default {
     }),
     nodeResolve(),
     commonjs(),
-    // uglify(),
     injectProcessEnv({
       SDK_VERSION: JSON.stringify(require('./package.json').version),
     }),

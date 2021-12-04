@@ -24,7 +24,7 @@ const getTimeStamp = () => {
 
 const STORAGEHEAD = 'content_wxapp_';
 const TRACKCODE = 'tezign_trace_id';
-export class TezignWxTrack {
+export default class TezignWxTrack {
   [key: string]: any;
   app_id: string;
   tenant_id: string;
