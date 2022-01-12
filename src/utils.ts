@@ -1,38 +1,55 @@
+export enum EPlatform {
+  web = 1,
+  wx,
+  tt,
+}
 export default {
   //获取路由
   getCurrentPage() {
-    //@ts-ignore
+    const platform = this.getPlatform();
+    const isWx = platform === EPlatform.wx;
+    if (!isWx) {
+      return window.location.href;
+    }
     const pages = getCurrentPages();
-    return pages[pages.length - 1].route;
+    return pages[pages.length - 1]?.route;
   },
-  // 获取带参数路由
-  getCurrentPageUrlWithArgs() {
-    //@ts-ignore
+  // 获取小程序路由参数
+  getParams() {
+    const platform = this.getPlatform();
+    const isWx = platform === EPlatform.wx;
+    if (!isWx) {
+      return window.location.href;
+    }
     const pages = getCurrentPages();
     const currentPage = pages[pages.length - 1];
-    const url = currentPage.route;
     const options = currentPage.options;
-    let urlWithArgs = `/${url}?`;
-    for (let key in options) {
-      const value = options[key];
-      urlWithArgs += `${key}=${value}&`;
-    }
-    urlWithArgs = urlWithArgs.substring(0, urlWithArgs.length - 1);
-    return urlWithArgs;
+    return options;
   },
-  // 获取所有参数
-  getParams() {
-    const url = this.getCurrentPageUrlWithArgs();
-    let pattern = /(\w+)=(\w+)/gi;
-    let parames = {}; // 定义Object
-    url.replace(pattern, function (a: string, b: string, c: string) {
+  // 根据url获取参数
+  getParamsWithUrl(url: string) {
+    const pattern = /([^&?=]+)=([^&?=]+)/g;
+    let parames: { [key: string]: string } = {}; // 定义Object
+    url.replace(pattern, (a: string, b: string, c: string) => {
       parames[b] = c;
+      return a;
     });
-    return parames; // 返回这个Object.
+    return parames; // 返回这个Object
   },
-  // 获取小程序地址参数
-  getParam(name: string) {
-    let params = this.getParams();
-    return params[name];
+  getPlatform() {
+    if (typeof window !== 'undefined' && typeof XMLHttpRequest === 'function') {
+      return EPlatform.web;
+    }
+    if (typeof wx !== 'undefined' && wx.getSystemInfo) {
+      return EPlatform.wx;
+    }
+    if (typeof tt !== 'undefined' && tt.getSystemInfo) {
+      return EPlatform.tt;
+    }
+    return null;
+  },
+  // 判断是否为Object
+  isObject(obj: any) {
+    return Object.prototype.toString.call(obj) === '[object Object]';
   },
 };

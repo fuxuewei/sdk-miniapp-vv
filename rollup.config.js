@@ -13,25 +13,21 @@ export default {
       file: 'lib/index.esm.js', // package.json 中 "module": "dist/index.esm.js"
       format: 'esm', // es module 形式的包， 用来import 导入， 可以tree shaking
       sourcemap: true,
-    },
-    {
-      file: 'lib/index.js', // package.json 中 "main": "dist/index.cjs.js",
-      format: 'cjs', // commonjs 形式的包， require 导入
-      sourcemap: true,
-    },
-    {
-      format: 'umd',
-      file: 'lib/index.umd.js', // umd 兼容形式的包， 可以直接应用于网页 script
-      name: 'Tracer',
-      sourcemap: true,
+      exports: 'auto',
       plugins: [uglify()],
     },
-
+    // {
+    //   file: 'lib/index.js', // package.json 中 "main": "dist/index.cjs.js",
+    //   format: 'cjs', // commonjs 形式的包， require 导入
+    //   sourcemap: true,
+    //   exports: 'auto',
+    // },
     {
       format: 'umd',
       file: 'lib/index.min.js', // umd 兼容形式的包， 可以直接应用于网页 script
       name: 'Tracer',
       sourcemap: true,
+      exports: 'auto',
       plugins: [uglify()],
     },
   ],

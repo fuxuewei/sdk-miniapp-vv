@@ -1,3 +1,20 @@
+'use strict';
+/*! *****************************************************************************
+Copyright (c) Microsoft Corporation.
+
+Permission to use, copy, modify, and/or distribute this software for any
+purpose with or without fee is hereby granted.
+
+THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH
+REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY
+AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT,
+INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM
+LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR
+OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
+PERFORMANCE OF THIS SOFTWARE.
+***************************************************************************** */
+/* global Reflect, Promise */
+
 var extendStatics = function (d, b) {
   extendStatics =
     Object.setPrototypeOf ||
@@ -24,20 +41,6 @@ function __extends(d, b) {
   d.prototype =
     b === null ? Object.create(b) : ((__.prototype = b.prototype), new __());
 }
-
-var __assign = function () {
-  __assign =
-    Object.assign ||
-    function __assign(t) {
-      for (var s, i = 1, n = arguments.length; i < n; i++) {
-        s = arguments[i];
-        for (var p in s)
-          if (Object.prototype.hasOwnProperty.call(s, p)) t[p] = s[p];
-      }
-      return t;
-    };
-  return __assign.apply(this, arguments);
-};
 
 /** 本地storage中user_id的存储key */
 var VISITOR_KEY = 'tz_tracer_visitor';
@@ -249,61 +252,6 @@ function int2str(number) {
 function str2int(str) {
   return parseInt(str, 36);
 }
-
-var ClickEvent = (function () {
-  function ClickEvent() {}
-
-  ClickEvent.createEventHandler = function (callback) {
-    return function (e) {
-      var target = e.target;
-
-      while (target && target !== document) {
-        var getAttribute = target.getAttribute.bind(target);
-        var info = getAttribute(CLICK_EVENT_ATTR);
-
-        if (info) {
-          try {
-            info = JSON.parse(info); // console.log('info', info);
-            // track(info);
-
-            callback(info);
-          } catch (e) {} // 如果设置了 data-track-bubble = true 则继续向上递归寻找 data-track
-          // 没有设置，则中止
-
-          if (getAttribute(CLICK_EVENT_BUBBLE) !== 'true') break;
-        }
-
-        target = target.parentNode; // 如果父节点为空则跳出
-
-        if (!target) break;
-      }
-    };
-  };
-
-  ClickEvent.bindEvent = function (callback) {
-    if (ClickEvent.eventhandler) {
-      return;
-    }
-
-    ClickEvent.eventhandler = ClickEvent.createEventHandler(callback); // document.addEventListener('click', this.handler.bind(this));
-    // gua = this.track;
-
-    document.addEventListener('click', ClickEvent.eventhandler);
-  };
-
-  ClickEvent.removeEvent = function () {
-    // console.log('remove', this.track === gua);
-    // document.removeEventListener('click', this.handler.bind(this));
-    if (!ClickEvent.eventhandler) {
-      return;
-    }
-
-    document.removeEventListener('click', ClickEvent.eventhandler);
-    ClickEvent.eventhandler = undefined;
-  };
-
-  return ClickEvent;
-})();
 
 /**
  * Copyright 2016 Google Inc. All Rights Reserved.
@@ -1381,125 +1329,6 @@ function getNowDate() {
   return NewDate;
 }
 
-// polyfill 解决兼容性问题
-
-var Exposure = (function () {
-  function Exposure(options) {
-    this.dataList = [];
-    this.dataAllList = [];
-    this.trackEvent = {};
-    this.maxNum = 20;
-    this.time = 2000;
-    this.timer = 0;
-    this.container = '#scrollExposureContainer';
-    this.observer = undefined;
-    var container = options.container,
-      maxNum = options.maxNum,
-      time = options.time;
-
-    if (container) {
-      this.container = container;
-    }
-
-    if (maxNum) {
-      this.maxNum = maxNum;
-    }
-
-    if (time) {
-      this.time = time;
-    }
-  }
-
-  Exposure.prototype.bindEvent = function (callback) {
-    var self = this;
-    self.observer = new IntersectionObserver(
-      function (entries) {
-        // console.log('暴露埋点-entries', entries);
-        entries.forEach(function (entry) {
-          var _a;
-
-          if (entry.isIntersecting) {
-            try {
-              self.timer && clearTimeout(self.timer);
-              var eventParam =
-                entry.target.attributes[EXPOSURE_EVENT_ATTR].value;
-              var eventParseParam = JSON.parse(eventParam);
-              var exposureEventCode = localStorage.getItem('exposureCode'); // storage只set一次，，避免多次set
-
-              self.trackEvent.eventCode &&
-                self.trackEvent.eventCode !== exposureEventCode &&
-                localStorage.setItem('exposureCode', eventParseParam.code); // 如果没有id则不计入埋点
-
-              if (!eventParseParam.id) {
-                return;
-              }
-
-              var track = {
-                exposureId: eventParseParam.id,
-                exposureUrl: eventParseParam.url,
-              };
-              var alltrack = {
-                exposureId: eventParseParam.id,
-                exposureUrl: eventParseParam.url,
-                exposureCode: eventParseParam.code,
-              };
-              self.dataList.push(track);
-              self.dataAllList.push(alltrack);
-              self.trackEvent = {
-                eventCode: eventParseParam.code,
-                eventChanel: eventParseParam.channel,
-              }; // 已经上报的节点、取消对该DOM的观察
-
-              (_a = self.observer) === null || _a === void 0
-                ? void 0
-                : _a.unobserve(entry.target); // 超出最大长度直接上报，
-
-              if (self.dataList.length >= self.maxNum) {
-                self.send(callback);
-              } else if (self.dataList.length > 0) {
-                self.timer = window.setTimeout(function () {
-                  // 只要有新的数据进来，接下来如果没有增加，自动2秒后上报
-                  self.send(callback);
-                }, self.time);
-              }
-            } catch (err) {
-              console.log('暴露埋点error: ', err);
-            }
-          }
-        });
-      },
-      {
-        root: document.querySelector(self.container),
-        rootMargin: '0px',
-        threshold: 0.5, // 目标dom出现在视图的比例 0 - 1
-      }
-    );
-  }; // 添加至观察列表
-
-  Exposure.prototype.add = function (entry) {
-    // console.log('add', entry);
-    var el = (entry || {}).el;
-    this.observer && el && this.observer.observe(el);
-  }; // 如果有需要再开放，增加缓存的数据逻辑
-  // 触发上报数据
-
-  Exposure.prototype.send = function (callback) {
-    // 截取，并清空dataList
-    var data = this.dataList.splice(0, this.maxNum);
-    var trackData = {
-      event_time: getNowDate(),
-      event_type_code: this.trackEvent.eventCode,
-      event_properties: {
-        channel: this.trackEvent.eventChanel,
-        exposure_params: JSON.stringify(data),
-      },
-    };
-    callback(trackData);
-  };
-
-  return Exposure;
-})();
-
 var assign = function assign(target) {
   var rest = [];
 
@@ -1520,12 +1349,125 @@ var assign = function assign(target) {
   return target;
 };
 
+function parseOptionsToQuery(options) {
+  var query = '?';
+
+  for (var key in options) {
+    var value = options[key];
+    query += key + '=' + value + '&';
+  }
+
+  return query.substring(0, query.length - 1);
+}
+
+var getPlatform = function getPlatform() {
+  if (typeof window !== 'undefined' && typeof XMLHttpRequest === 'function') {
+    return EPlatform.web;
+  }
+
+  if (typeof wx !== 'undefined' && wx.getSystemInfo) {
+    return EPlatform.wx;
+  }
+
+  if (typeof tt !== 'undefined' && tt.getSystemInfo) {
+    return EPlatform.tt;
+  }
+
+  return null;
+};
+
+var platform$1 = getPlatform();
+
+var formatUrl = function formatUrl(data) {
+  var _a, _b, _c, _d, _e, _f, _g, _h, _j;
+
+  if (EPlatform.web === platform$1) {
+    var path = window.location.pathname + window.location.hash; // hash路由
+
+    data.event_properties = {
+      url:
+        ((_a = data.event_properties) === null || _a === void 0
+          ? void 0
+          : _a.url) || window.location.href,
+      host:
+        ((_b = data.event_properties) === null || _b === void 0
+          ? void 0
+          : _b.host) || window.location.host,
+      path:
+        ((_c = data.event_properties) === null || _c === void 0
+          ? void 0
+          : _c.path) || path,
+    };
+  }
+
+  if (EPlatform.wx === platform$1) {
+    var pages = getCurrentPages();
+    var page = pages[pages.length - 1];
+    var url = void 0;
+    var path = void 0;
+
+    if (!pages.length || !page) {
+      url = WX_HOST + '404';
+      path = '404';
+    } else {
+      var options = page.options;
+      url = WX_HOST + page.is + parseOptionsToQuery(options);
+      path = page.is + parseOptionsToQuery(options);
+    }
+
+    data.event_properties = {
+      url:
+        ((_d = data.event_properties) === null || _d === void 0
+          ? void 0
+          : _d.url) || url,
+      host:
+        ((_e = data.event_properties) === null || _e === void 0
+          ? void 0
+          : _e.host) || WX_HOST,
+      path:
+        ((_f = data.event_properties) === null || _f === void 0
+          ? void 0
+          : _f.path) || path,
+    };
+  }
+
+  if (EPlatform.tt === platform$1) {
+    var pages = getCurrentPages();
+    var page = pages[pages.length - 1];
+    var url = void 0;
+    var path = void 0;
+
+    if (!pages.length || !page) {
+      url = TT_HOST + '404';
+      path = '404';
+    } else {
+      var options = page.options;
+      url = TT_HOST + page.is + parseOptionsToQuery(options);
+      path = page.is + parseOptionsToQuery(options);
+    }
+
+    data.event_properties = {
+      url:
+        ((_g = data.event_properties) === null || _g === void 0
+          ? void 0
+          : _g.url) || url,
+      host:
+        ((_h = data.event_properties) === null || _h === void 0
+          ? void 0
+          : _h.host) || TT_HOST,
+      path:
+        ((_j = data.event_properties) === null || _j === void 0
+          ? void 0
+          : _j.path) || path,
+    };
+  }
+};
+
 var BaseTezignTracer = (function () {
   function BaseTezignTracer() {
     this.silent = false;
     this.env = 'development';
-    this.sessionTimeout = SESSION_TIMEOUT; // this.sysInfo = this.getSysInfo(params);
-
+    this.sessionTimeout = SESSION_TIMEOUT;
     this.initInfo = {};
   }
 
@@ -1563,7 +1505,7 @@ var BaseTezignTracer = (function () {
     this.silent = silent;
     this.sessionTimeout = sessionTimeout;
     this.env = env;
-    this.initInfo.user_id = String(user_id) || this.getUserId();
+    this.initInfo.user_id = String(user_id || this.getUserId());
     this.initInfo.tenant_id = tenant_id;
     this.initInfo.global_user_id = String(global_user_id);
     this.initInfo.distinct_id = distinct_id;
@@ -1595,8 +1537,13 @@ var BaseTezignTracer = (function () {
   };
 
   BaseTezignTracer.prototype.track = function (data) {
-    // 开启静默模式后不会向服务端发送数据
-    if (this.silent) return;
+    // 开启静默模式后不会向服务端发送数据, 没有tenant_id也不会向服务器发送数据
+    if (this.silent || !this.initInfo.tenant_id) return;
+
+    if (data.event_type_code === 'Page_View') {
+      formatUrl(data);
+    }
+
     var event = assign(
       {
         event_time: getNowDate(),
@@ -1647,7 +1594,7 @@ var WebTracer = (function (_super) {
       browser: browser.type,
       browser_version: browser.versions,
       source_from: os.isMobile ? 'h5' : 'web',
-      device_id: 'device_id',
+      device_id: '',
     };
   };
 
@@ -1740,27 +1687,8 @@ var WebTracer = (function (_super) {
     return ClickEvent;
   };
 
-  WebTracer.initExposureTrack = function (initOption, exposureInitOption) {
-    var trackInstance = new WebTracer();
-    var exposureInstance = new Exposure(exposureInitOption);
-    trackInstance.init(initOption);
-    exposureInstance.bindEvent(trackInstance.track.bind(trackInstance));
-    return exposureInstance;
-  };
-
   return WebTracer;
 })(BaseTezignTracer);
-
-function parseOptionsToQuery(options) {
-  var query = '?';
-
-  for (var key in options) {
-    var value = options[key];
-    query += key + '=' + value + '&';
-  }
-
-  return query.substring(0, query.length - 1);
-}
 
 // type TaroType = typeof Taro;
 
@@ -1930,22 +1858,6 @@ var UnknownTracer = (function () {
 
   return UnknownTracer;
 })();
-
-var getPlatform = function getPlatform() {
-  if (typeof window !== 'undefined' && typeof XMLHttpRequest === 'function') {
-    return EPlatform.web;
-  }
-
-  if (typeof wx !== 'undefined' && wx.getSystemInfo) {
-    return EPlatform.wx;
-  }
-
-  if (typeof tt !== 'undefined' && tt.getSystemInfo) {
-    return EPlatform.tt;
-  }
-
-  return null;
-};
 
 var _a;
 var map =

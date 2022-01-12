@@ -3,7 +3,7 @@
  * @owner fuxuewei
  * @team N1
  */
-import utils from './utils';
+import utils, { EPlatform } from './utils';
 import TezignTracer from './main';
 
 // SDK需要先通过init初始化才能正常使用
@@ -14,16 +14,33 @@ interface OptionsType {
   env?: 'dev' | 'prod';
 }
 const tracer = new TezignTracer();
-//@ts-ignore
-const originPage = Page;
+const platform = utils.getPlatform();
+const isWx = platform === EPlatform.wx;
 // 获取当前时间戳
 const getTimeStamp = () => {
   let timestamp = Date.parse(new Date().toString());
   return timestamp;
 };
 
-const STORAGEHEAD = 'content_wxapp_';
+const PREFIX = 'Content_WXapp_';
 const TRACKCODE = 'tezign_trace_id';
+/**
+ * 代理原始方法，并执行回调函数
+ * @param {*} fn 需要代理的方法
+ * @param {*} cb 需要执行的回调
+ */
+function _proxyHooks(fn = function () {}, cb: any) {
+  return function () {
+    // 如果回调存在
+    if (cb) {
+      // eslint-disable-next-line @typescript-eslint/no-invalid-this
+      cb.apply(this, arguments);
+    }
+    // 执行原函数
+    // eslint-disable-next-line @typescript-eslint/no-invalid-this
+    fn.apply(this, arguments);
+  };
+}
 export default class TezignWxTrack {
   [key: string]: any;
   app_id: string;
@@ -31,34 +48,34 @@ export default class TezignWxTrack {
   union_id: string;
   open_id: string;
   showOptions: any; // 分享参数
+  trace_id: string; // 渠道号
+  isShare = false; // 用于过滤分享触发的 pageShow pageHide 事件
+  wx_scene: string; // 微信渠道号
   constructor() {
-    // App 事件
+    const _that = this;
+    if (!isWx) {
+      return;
+    }
     /**
-     * 启动
+     * App 启动
      * https://developers.weixin.qq.com/miniprogram/dev/api/base/app/life-cycle/wx.getLaunchOptionsSync.html
      */
-    //@ts-ignore
-    // const dataInfo = wx.getLaunchOptionsSync();
     /**
-     * 显示
+     * App 显示
      * https://developers.weixin.qq.com/miniprogram/dev/api/base/app/app-event/wx.onAppShow.html
      */
-    //@ts-ignore
-    wx.onAppShow((options) => {
-      // 获取options: app_id & scene
-      this.showOptions = options;
+    wx.onAppShow(() => {
+      const dataInfo = wx.getLaunchOptionsSync();
+      this.getTrackIdByQueryScene(dataInfo);
+      if (_that.isShare) {
+        return;
+      }
       setTimeout(() => {
-        const queryScene = options?.query?.[TRACKCODE];
-        // query.scene 需要使用 decodeURIComponent 才能获取到生成二维码时传入的 渠道号
-        const trace_id = queryScene
-          ? decodeURIComponent(queryScene)
-          : utils.getParam(TRACKCODE);
-        this.localCache().set(TRACKCODE, trace_id);
-        this.track('Content_wxApp_AppShow');
+        _that.track('AppShow');
       });
     });
     /**
-     * 隐藏
+     * App 隐藏
      * https://developers.weixin.qq.com/miniprogram/dev/api/base/app/app-event/wx.onAppHide.html
      */
     //  wx.onAppHide((options) => {
@@ -69,85 +86,116 @@ export default class TezignWxTrack {
   init({ app_id, token, proxyPage = true, env }: OptionsType) {
     this.app_id = app_id;
     this.tenant_id = token;
-    let _that = this;
+    const _that = this;
     tracer.init({
       // 'development' | 'production', 默认'development'
       env: env === 'prod' ? 'production' : 'development',
       tenant_id: this.tenant_id,
     });
-    if (proxyPage) {
-      /**
-       * 重写 Page 生命周期事件
-       * https://developers.weixin.qq.com/miniprogram/dev/reference/api/Page.html#onLoad-Object-query
-       */
-      //@ts-ignore
 
-      Page = (page) => {
-        // 给onShow方法插入埋点
-        const originMethodShow = page['onShow'];
-        const originMethodHide = page['onHide'];
-        const originMethodShare = page['onShareAppMessage'];
-        let inTime: any;
-        let currentRoute: string;
-        if (originMethodShow && originMethodHide && originMethodShare) {
-          page['onShow'] = function () {
-            const route = this.route;
-            currentRoute = route;
-            inTime = getTimeStamp();
-            _that.track('Content_wxApp_PageShow', {
-              page_route: route,
-            });
-            return originMethodShow();
-          };
-          page['onHide'] = function () {
-            if (currentRoute === this.route) {
-              _that.track('Content_wxApp_PageHide', {
-                page_route: currentRoute,
-                stay_time: getTimeStamp() - inTime, // 当前页面停留耗时（毫秒）
-              });
-            }
-            return originMethodHide();
-          };
-          page['onShareAppMessage'] = function (share_options) {
-            _that.localCache().set('share_options', {
-              share_from: share_options.from,
-              page_route: currentRoute,
-            });
-            return originMethodShare(share_options);
-          };
-        }
-        return originPage(page);
-      };
+    if (proxyPage && isWx && Page) {
+      const originPage = Page;
+      // @ts-ignore
+      Page = (options: any) => originPage(_that.proxyPageOptions(options));
     }
   }
-  track(t: string, data?: any) {
-    const showOptions = this.showOptions;
+
+  /**
+   * 重写App中的options参数
+   * @param {*} options 原始的options参数
+   * @returns 新的options参数
+   */
+  proxyPageOptions(options: any) {
+    const _that = this;
+    let inTime: number;
+    const usePageShow = function () {
+      if (_that.isShare) {
+        _that.isShare = false;
+        return;
+      }
+      inTime = getTimeStamp();
+      _that.track('PageShow', {
+        page_route: options.route,
+      });
+    };
+
+    const usePageHide = function () {
+      if (_that.isShare) {
+        return;
+      }
+      _that.track('PageHide', {
+        page_route: this.route,
+        stay_time: getTimeStamp() - inTime, // 当前页面停留耗时（毫秒）
+      });
+    };
+
+    const userShareApp = function (share_options: any) {
+      _that.isShare = true;
+      _that.localCache().set('share_options', {
+        share_from: share_options.from,
+        page_route: this.route,
+      });
+    };
+    // onShow 事件监听
+    options.onShow = _proxyHooks(options.onShow, usePageShow);
+    // onHide 事件监听
+    options.onHide = _proxyHooks(options.onHide, usePageHide);
+    // onShareAppMessage 事件监听
+    options.onShareAppMessage = _proxyHooks(
+      options.onShareAppMessage,
+      userShareApp
+    );
+    return options;
+  }
+  // 二维码模式获取参数
+  getTrackIdByQueryScene(options) {
+    this.wx_scene = options?.scene.toString();
+    const queryScene = options?.query?.scene;
+    // query.scene 需要使用 decodeURIComponent 才能获取到生成二维码时传入的 渠道号
+    let trace_id: string;
+    if (queryScene) {
+      let scene = decodeURIComponent(queryScene);
+      trace_id = utils.getParamsWithUrl(scene)?.[TRACKCODE];
+      this.trace_id = trace_id;
+    }
+  }
+  // 埋点上报
+  track(t: string, data?: { [key: string]: any }) {
+    if (data && !utils.isObject(data)) {
+      return;
+    }
+    const tezign_trace_id =
+      this?.trace_id ||
+      utils.getParams()?.[TRACKCODE] ||
+      this.localCache().get('trace_id');
+    this.localCache().set('trace_id', tezign_trace_id);
+
     // 公共属性
     let commonProps = {
       page_route: utils.getCurrentPage(),
       app_id: this.app_id,
-      wxapp_scence: showOptions.scene.toString(),
-      tezign_trace_id: this.localCache().get(TRACKCODE),
+      wxapp_scence: this.wx_scene,
+      tezign_trace_id: tezign_trace_id,
       tenant_key: 'content-wx-sdk',
       sdk_version: process.env.SDK_VERSION,
       tenant_id: this.tenant_id,
       page_title: '',
     };
-    if (t === 'Content_wxApp_Share') {
+    if (t === 'Share') {
       commonProps = {
         ...commonProps,
         ...this.localCache().get('share_options'),
       };
     }
-    if (t === 'Content_wxApp_Login') {
+    if (t === 'Login') {
       this.setUser(data);
       delete data.union_id;
       delete data.open_id;
     }
     const localUserInfo = this.localCache().get('user_info');
-
     tracer.track({
-      event_type_code: t,
+      event_type_code: PREFIX + t,
+      user_id: this.open_id || localUserInfo?.open_id,
       event_properties: {
         unionid: this.union_id || localUserInfo.union_id,
         open_id: this.open_id || localUserInfo.open_id,
@@ -159,20 +207,23 @@ export default class TezignWxTrack {
   localCache() {
     return {
       get: function (t: string) {
+        const storageName = PREFIX + t;
         let e;
         try {
-          //@ts-ignore
-
-          e = wx.getStorageSync(STORAGEHEAD + t);
+          e = isWx
+            ? wx.getStorageSync(storageName)
+            : localStorage.getItem(storageName);
         } catch (t) {
           return console.error('CacheManager.get error', t);
         }
         return e;
       },
       set: function (t: string, e: any) {
+        const storageName = PREFIX + t;
         try {
-          //@ts-ignore
-          wx.setStorageSync(STORAGEHEAD + t, e);
+          isWx
+            ? wx.setStorageSync(storageName, e)
+            : localStorage.setItem(storageName, e);
         } catch (t) {
           return console.error('CacheManager.set error', t);
         }
@@ -180,7 +231,11 @@ export default class TezignWxTrack {
       },
     };
   }
-  setUser(userInfo: { [key: string]: string }) {
+  // 设置用户信息
+  setUser(userInfo?: { [key: string]: string }) {
+    if (!userInfo || !utils.isObject(userInfo)) {
+      return;
+    }
     const currentUserInfo = this.localCache().get('user_info');
     this.localCache().set('user_info', { ...currentUserInfo, ...userInfo });
     Object.keys(userInfo).forEach((key) => {
