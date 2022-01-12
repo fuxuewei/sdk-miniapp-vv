@@ -5,6 +5,7 @@
  */
 import utils, { EPlatform } from './utils';
 import TezignTracer from './main';
+//test
 //dev test rebase
 
 // SDK需要先通过init初始化才能正常使用
